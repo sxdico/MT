@@ -122,9 +122,33 @@ export const usePosStore = create<PosState>((set, get) => ({
     const state = get();
     if (state.ticketItems.length === 0) return null;
 
+    const now = Date.now();
+
+    // 1 mesa = 1 pedido abierto: si la mesa ya tiene un pedido activo, acumular items
+    if (state.tipoServicio === 'Mesa' && state.mesaSeleccionada) {
+      const mesa = db.mesas.find((m) => m.numero === state.mesaSeleccionada);
+      if (mesa && mesa.pedidoId) {
+        const pedidoExistente = db.pedidos.find((p) => p.id === mesa.pedidoId);
+        if (pedidoExistente && (pedidoExistente.estado === 'nuevo' || pedidoExistente.estado === 'preparando' || pedidoExistente.estado === 'listo')) {
+          pedidoExistente.items.push(...state.ticketItems);
+          pedidoExistente.total = pedidoExistente.items.reduce((sum, it) => sum + it.precio * it.cantidad, 0);
+          pedidoExistente.updatedAt = now;
+          mesa.total = pedidoExistente.total;
+
+          set({ mesas: [...db.mesas] });
+          realtime.emit('update_pedido', pedidoExistente);
+          realtime.emit('mesa_actualizada', db.mesas);
+
+          set({ ticketItems: [] });
+
+          return pedidoExistente;
+        }
+      }
+    }
+
+    // Mesa libre o servicio sin mesa: crear pedido nuevo
     const total = state.ticketItems.reduce((sum, it) => sum + it.precio * it.cantidad, 0);
     const id = db.nextPedidoId++;
-    const now = Date.now();
 
     const pedido: Pedido = {
       id,
