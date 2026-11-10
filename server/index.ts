@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import { Server as SocketIOServer } from 'socket.io';
 import type { Producto, Mesa, Pedido, CorteCaja, Usuario, EstadoPedido } from '../src/types/index.js';
 
-const PORT = 3001;
+const PORT = 3002;
 const JWT_SECRET = 'taqueria-pos-pro-secret-2026';
 const app = express();
 const server = http.createServer(app);

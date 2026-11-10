@@ -5,21 +5,33 @@ import { realtime } from '@/lib/realtime';
 
 interface KitchenState {
   pedidos: Pedido[];
+  initialized: boolean;
   init: () => void;
+  cleanup: () => void;
   moverEstado: (id: number, estado: EstadoPedido) => void;
   removePedido: (id: number) => void;
 }
 
-export const useKitchenStore = create<KitchenState>((set) => ({
+// Guardamos las funciones de desuscripción fuera del store
+let unsubNuevo: (() => void) | null = null;
+let unsubUpdate: (() => void) | null = null;
+
+export const useKitchenStore = create<KitchenState>((set, get) => ({
   pedidos: [],
+  initialized: false,
 
   init: () => {
+    // ✅ Guard: si ya está inicializado, no registres otra vez
+    if (get().initialized) return;
+    set({ initialized: true });
+
     const active = db.pedidos.filter(
       (p) => p.estado === 'nuevo' || p.estado === 'preparando' || p.estado === 'listo'
     );
     set({ pedidos: active });
 
-    realtime.on('nuevo_pedido', (data) => {
+    // ✅ on() regresa una función para limpiar, la guardamos
+    unsubNuevo = realtime.on('nuevo_pedido', (data) => {
       const pedido = data as Pedido;
       set((s) => {
         if (s.pedidos.find((p) => p.id === pedido.id)) return s;
@@ -27,7 +39,7 @@ export const useKitchenStore = create<KitchenState>((set) => ({
       });
     });
 
-    realtime.on('update_pedido', (data) => {
+    unsubUpdate = realtime.on('update_pedido', (data) => {
       const pedido = data as Pedido;
       set((s) => ({
         pedidos: s.pedidos.map((p) => (p.id === pedido.id ? pedido : p)),
@@ -35,23 +47,34 @@ export const useKitchenStore = create<KitchenState>((set) => ({
     });
   },
 
+  cleanup: () => {
+    // ✅ Llamamos las funciones que nos regresó on()
+    unsubNuevo?.();
+    unsubUpdate?.();
+    unsubNuevo = null;
+    unsubUpdate = null;
+    set({ initialized: false });
+  },
+
   moverEstado: (id, estado) => {
     const pedido = db.pedidos.find((p) => p.id === id);
     if (!pedido) return;
-    pedido.estado = estado;
-    pedido.updatedAt = Date.now();
+    
+    const pedidoActualizado = { ...pedido, estado, updatedAt: Date.now() };
     if (estado === 'listo') {
-      pedido.entregadoAt = Date.now();
-      // Auto-remove after 2 minutes
+      pedidoActualizado.entregadoAt = Date.now();
       setTimeout(() => {
-        db.pedidos.find((p) => p.id === id);
         set((s) => ({ pedidos: s.pedidos.filter((p) => p.id !== id) }));
       }, 120000);
     }
+    
+    const idx = db.pedidos.findIndex((p) => p.id === id);
+    if (idx !== -1) db.pedidos[idx] = pedidoActualizado;
+    
     set((s) => ({
-      pedidos: s.pedidos.map((p) => (p.id === id ? pedido : p)),
+      pedidos: s.pedidos.map((p) => (p.id === id ? pedidoActualizado : p)),
     }));
-    realtime.emit('update_pedido', pedido);
+    realtime.emit('update_pedido', pedidoActualizado);
   },
 
   removePedido: (id) => {

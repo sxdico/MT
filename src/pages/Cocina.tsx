@@ -121,26 +121,31 @@ function PedidoCard({ pedido, onMover }: { pedido: Pedido; onMover: (id: number,
 }
 
 export default function Cocina() {
-  const kitchenStore = useKitchenStore();
+  const { pedidos, init, moverEstado, cleanup } = useKitchenStore();
   const [reloj, setReloj] = useState(new Date());
   const soundRef = useRef<HTMLAudioElement | null>(null);
   const prevCountRef = useRef(0);
 
+  // ✅ FIX: Array vacío + cleanup para no duplicar listeners
   useEffect(() => {
-    kitchenStore.init();
+    init();
 
     const timer = setInterval(() => setReloj(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, [kitchenStore]);
+    return () => {
+      clearInterval(timer);
+      cleanup();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Play sound when new pedidos arrive
   useEffect(() => {
-    const nuevos = kitchenStore.pedidos.filter((p) => p.estado === 'nuevo');
+    const nuevos = pedidos.filter((p) => p.estado === 'nuevo');
     if (nuevos.length > prevCountRef.current) {
       playDing();
     }
     prevCountRef.current = nuevos.length;
-  }, [kitchenStore.pedidos]);
+  }, [pedidos]);
 
   const playDing = () => {
     try {
@@ -161,9 +166,9 @@ export default function Cocina() {
     }
   };
 
-  const pedidosNuevos = kitchenStore.pedidos.filter((p) => p.estado === 'nuevo');
-  const pedidosPreparando = kitchenStore.pedidos.filter((p) => p.estado === 'preparando');
-  const pedidosListos = kitchenStore.pedidos.filter((p) => p.estado === 'listo');
+  const pedidosNuevos = pedidos.filter((p) => p.estado === 'nuevo');
+  const pedidosPreparando = pedidos.filter((p) => p.estado === 'preparando');
+  const pedidosListos = pedidos.filter((p) => p.estado === 'listo');
 
   const pendientes = pedidosNuevos.length + pedidosPreparando.length;
 
@@ -238,7 +243,7 @@ export default function Cocina() {
                     <PedidoCard
                       key={pedido.id}
                       pedido={pedido}
-                      onMover={kitchenStore.moverEstado}
+                      onMover={moverEstado}
                     />
                   ))
                 )}
