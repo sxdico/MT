@@ -13,8 +13,10 @@ interface PosState {
   ticketItems: ItemTicket[];
   // Active draft pedidos per mesa (so we can come back to them)
   draftPedidos: Map<number, ItemTicket[]>;
+  initialized: boolean;
   // Actions
   init: () => void;
+  cleanup: () => void;
   setTipoServicio: (tipo: TipoServicio | null) => void;
   seleccionarMesa: (numero: number) => void;
   setClienteNombre: (nombre: string) => void;
@@ -40,9 +42,16 @@ export const usePosStore = create<PosState>((set, get) => ({
   clienteNombre: '',
   ticketItems: [],
   draftPedidos: new Map(),
+  initialized: false,
 
   init: () => {
-    set({ productos: [...db.productos], mesas: [...db.mesas] });
+    // ✅ GUARD: Si ya está inicializado, no vuelvas a hacer set
+    if (get().initialized) return;
+    set({ initialized: true, productos: [...db.productos], mesas: [...db.mesas] });
+  },
+
+  cleanup: () => {
+    set({ initialized: false });
   },
 
   setTipoServicio: (tipo) => {

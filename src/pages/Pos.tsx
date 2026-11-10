@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
@@ -41,7 +41,28 @@ const servicios: ServicioOption[] = [
 ];
 
 export default function Pos() {
-  const posStore = usePosStore();
+  const {
+    productos,
+    mesas,
+    ticketItems,
+    tipoServicio,
+    mesaSeleccionada,
+    clienteNombre,
+    init,
+    cleanup,
+    refreshMesas,
+    setTipoServicio,
+    seleccionarMesa,
+    addItem,
+    updateItem,
+    removeItem,
+    clearTicket,
+    setClienteNombre,
+    enviarCocina,
+    cobrar,
+    cancelarPedido,
+    getTicketTotal,
+  } = usePosStore();
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
 
@@ -52,41 +73,45 @@ export default function Pos() {
   const [pedidoCobrado, setPedidoCobrado] = useState<Pedido | null>(null);
   const [editItem, setEditItem] = useState<ItemTicket | null>(null);
   const [showReceipt, setShowReceipt] = useState(false);
-  const realtimeInitialized = useRef(false);
 
   useEffect(() => {
-    posStore.init();
-    if (!realtimeInitialized.current) {
-      realtimeInitialized.current = true;
-      realtime.on('mesa_actualizada', () => {
-        posStore.refreshMesas();
-      });
-      realtime.on('update_pedido', () => {
-        posStore.refreshMesas();
-      });
-    }
-  }, [posStore]);
+    init();
 
-  const productosFiltrados = posStore.productos.filter((p) => p.categoria === categoriaActiva);
-  const total = posStore.getTicketTotal();
+    const unsubMesa = realtime.on('mesa_actualizada', () => {
+      refreshMesas();
+    });
+    const unsubPedido = realtime.on('update_pedido', () => {
+      refreshMesas();
+    });
+
+    return () => {
+      unsubMesa();
+      unsubPedido();
+      cleanup?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const productosFiltrados = productos.filter((p) => p.categoria === categoriaActiva);
+  const total = getTicketTotal();
 
   const handleSeleccionarServicio = (tipo: TipoServicio) => {
     if (tipo === 'Mesa') {
-      posStore.setTipoServicio(tipo);
+      setTipoServicio(tipo);
       setVista('inicio');
     } else {
-      posStore.setTipoServicio(tipo);
+      setTipoServicio(tipo);
       setVista('venta');
     }
   };
 
   const handleMesaClick = (numero: number) => {
-    const mesa = posStore.mesas.find((m) => m.numero === numero);
+    const mesa = mesas.find((m) => m.numero === numero);
     if (mesa?.estado === 'ocupada') {
-      posStore.seleccionarMesa(numero);
+      seleccionarMesa(numero);
       setVista('venta');
     } else {
-      posStore.seleccionarMesa(numero);
+      seleccionarMesa(numero);
       setVista('venta');
     }
   };
@@ -97,7 +122,7 @@ export default function Pos() {
 
   const handleConfirmProduct = (cantidad: number, notas: string) => {
     if (productoModal) {
-      posStore.addItem(productoModal, cantidad, notas);
+      addItem(productoModal, cantidad, notas);
       toast.success(`${cantidad}x ${productoModal.nombre} agregado`);
     }
     setProductoModal(null);
@@ -105,12 +130,12 @@ export default function Pos() {
 
   const handleEditItem = (item: ItemTicket) => {
     setEditItem(item);
-    setProductoModal(posStore.productos.find((p) => p.id === item.productoId) || null);
+    setProductoModal(productos.find((p) => p.id === item.productoId) || null);
   };
 
   const handleConfirmEdit = (cantidad: number, notas: string) => {
     if (editItem) {
-      posStore.updateItem(editItem.id, cantidad, notas);
+      updateItem(editItem.id, cantidad, notas);
       toast.success('Producto actualizado');
       setEditItem(null);
     }
@@ -118,18 +143,18 @@ export default function Pos() {
   };
 
   const handleEnviarCocina = () => {
-    if (posStore.ticketItems.length === 0) {
+    if (ticketItems.length === 0) {
       toast.error('No hay productos en el ticket');
       return;
     }
-    const pedido = posStore.enviarCocina(user?.nombre || 'Cajero');
+    const pedido = enviarCocina(user?.nombre || 'Cajero');
     if (pedido) {
       toast.success(`Pedido #${pedido.id} enviado a cocina`);
     }
   };
 
   const handleCobrar = () => {
-    if (posStore.ticketItems.length === 0) {
+    if (ticketItems.length === 0) {
       toast.error('No hay productos en el ticket');
       return;
     }
@@ -137,7 +162,7 @@ export default function Pos() {
   };
 
   const handleConfirmCobro = (metodo: MetodoPago, efectivoRecibido?: number) => {
-    const pedido = posStore.cobrar(user?.nombre || 'Cajero', metodo, efectivoRecibido);
+    const pedido = cobrar(user?.nombre || 'Cajero', metodo, efectivoRecibido);
     if (pedido) {
       setPedidoCobrado(pedido);
       toast.success(`Pedido #${pedido.id} cobrado`);
@@ -152,23 +177,23 @@ export default function Pos() {
   };
 
   const handleCancelar = () => {
-    if (posStore.ticketItems.length === 0 && !posStore.mesaSeleccionada) {
+    if (ticketItems.length === 0 && !mesaSeleccionada) {
       setVista('inicio');
       return;
     }
     if (confirm('¿Cancelar el ticket actual?')) {
-      posStore.cancelarPedido();
+      cancelarPedido();
       toast.success('Ticket cancelado');
       setVista('inicio');
     }
   };
 
   const handleRemoveItem = (id: string) => {
-    posStore.removeItem(id);
+    removeItem(id);
   };
 
   // ===== VISTA INICIO: Selección de servicio + grid de mesas =====
-  if (vista === 'inicio' && posStore.tipoServicio === null) {
+  if (vista === 'inicio' && tipoServicio === null) {
     return (
       <div className="p-6 lg:p-8 max-w-6xl mx-auto animate-fade-in">
         <h2 className="text-2xl font-bold text-white mb-1">Punto de Venta</h2>
@@ -194,7 +219,7 @@ export default function Pos() {
   }
 
   // ===== VISTA: Grid de mesas =====
-  if (vista === 'inicio' && posStore.tipoServicio === 'Mesa') {
+  if (vista === 'inicio' && tipoServicio === 'Mesa') {
     return (
       <div className="p-6 lg:p-8 max-w-6xl mx-auto animate-fade-in">
         <div className="flex items-center justify-between mb-6">
@@ -203,7 +228,7 @@ export default function Pos() {
             <p className="text-dark-400">Selecciona una mesa para comenzar</p>
           </div>
           <button
-            onClick={() => { posStore.setTipoServicio(null); setVista('inicio'); }}
+            onClick={() => { setTipoServicio(null); setVista('inicio'); }}
             className="btn-secondary flex items-center gap-2"
           >
             <ArrowLeft className="w-4 h-4" /> Cambiar servicio
@@ -211,7 +236,7 @@ export default function Pos() {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {posStore.mesas.map((mesa) => (
+          {mesas.map((mesa) => (
             <button
               key={mesa.id}
               onClick={() => handleMesaClick(mesa.numero)}
@@ -233,7 +258,6 @@ export default function Pos() {
                   </div>
                 )}
               </div>
-              {/* Pulse ring for occupied */}
               {mesa.estado === 'ocupada' && (
                 <div className="absolute top-3 right-3 w-3 h-3 rounded-full bg-white/80 animate-pulse" />
               )}
@@ -247,34 +271,32 @@ export default function Pos() {
   // ===== VISTA: Pantalla de venta =====
   return (
     <div className="flex flex-col h-dvh animate-fade-in">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 lg:px-6 py-3 border-b border-dark-600 bg-dark-800 shrink-0">
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
               setVista('inicio');
-              posStore.clearTicket();
-              posStore.setTipoServicio(null);
+              clearTicket();
+              setTipoServicio(null);
             }}
             className="btn-secondary flex items-center gap-2 !py-2 !px-3"
           >
             <ArrowLeft className="w-4 h-4" /> <span className="hidden sm:inline">Inicio</span>
           </button>
           <div className="hidden sm:flex items-center gap-2 text-white">
-            {posStore.tipoServicio === 'Mesa' && <UtensilsCrossed className="w-5 h-5 text-primary-400" />}
-            {posStore.tipoServicio === 'Para llevar' && <ShoppingBag className="w-5 h-5 text-primary-400" />}
-            {posStore.tipoServicio === 'Comer en coche' && <Car className="w-5 h-5 text-primary-400" />}
-            {posStore.tipoServicio === 'Domicilio' && <Bike className="w-5 h-5 text-primary-400" />}
-            <span className="font-semibold">{posStore.tipoServicio}</span>
-            {posStore.mesaSeleccionada && (
+            {tipoServicio === 'Mesa' && <UtensilsCrossed className="w-5 h-5 text-primary-400" />}
+            {tipoServicio === 'Para llevar' && <ShoppingBag className="w-5 h-5 text-primary-400" />}
+            {tipoServicio === 'Comer en coche' && <Car className="w-5 h-5 text-primary-400" />}
+            {tipoServicio === 'Domicilio' && <Bike className="w-5 h-5 text-primary-400" />}
+            <span className="font-semibold">{tipoServicio}</span>
+            {mesaSeleccionada && (
               <span className="bg-primary-500 text-white text-sm px-2 py-0.5 rounded-md font-bold">
-                Mesa {posStore.mesaSeleccionada}
+                Mesa {mesaSeleccionada}
               </span>
             )}
           </div>
         </div>
 
-        {/* Floating Corte button for admin */}
         {user?.rol === 'admin' && (
           <button
             onClick={() => navigate('/corte')}
@@ -285,11 +307,8 @@ export default function Pos() {
         )}
       </div>
 
-      {/* Main content: products grid + ticket */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
-        {/* Left: products */}
         <div className="flex-1 flex flex-col overflow-hidden p-4">
-          {/* Category tabs */}
           <div className="flex gap-2 mb-4 shrink-0">
             {(['Tacos', 'Bebidas', 'Extras'] as const).map((cat) => (
               <button
@@ -306,7 +325,6 @@ export default function Pos() {
             ))}
           </div>
 
-          {/* Product grid */}
           <div className="flex-1 overflow-y-auto">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 pb-4">
               {productosFiltrados.map((producto) => (
@@ -316,38 +334,34 @@ export default function Pos() {
           </div>
         </div>
 
-        {/* Right: ticket */}
-        <div className="w-full lg:w-96 xl:w-[420px] shrink-0 max-h-[50vh] lg:max-h-none border-t lg:border-t-0 lg:border-l border-dark-600 bg-dark-800 flex flex-col overflow-hidden">
-          {/* Ticket header */}
+        <div className="w-full lg:w-96 xl:w- shrink-0 max-h- lg:max-h-none border-t lg:border-t-0 lg:border-l border-dark-600 bg-dark-800 flex flex-col overflow-hidden">
           <div className="px-4 py-3 border-b border-dark-600 shrink-0">
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-bold text-white text-lg flex items-center gap-2">
                 <Hash className="w-5 h-5 text-primary-400" /> Ticket Actual
               </h3>
-              {posStore.ticketItems.length > 0 && (
+              {ticketItems.length > 0 && (
                 <button
-                  onClick={() => posStore.clearTicket()}
+                  onClick={() => clearTicket()}
                   className="text-dark-400 hover:text-error-400 transition-colors text-sm"
                 >
                   Limpiar
                 </button>
               )}
             </div>
-            {/* Client name input for non-mesa */}
-            {posStore.tipoServicio && posStore.tipoServicio !== 'Mesa' && (
+            {tipoServicio && tipoServicio !== 'Mesa' && (
               <input
                 type="text"
-                value={posStore.clienteNombre}
-                onChange={(e) => posStore.setClienteNombre(e.target.value)}
+                value={clienteNombre}
+                onChange={(e) => setClienteNombre(e.target.value)}
                 placeholder="Nombre del cliente..."
                 className="input-field w-full !py-2 text-sm"
               />
             )}
           </div>
 
-          {/* Ticket items */}
           <div className="flex-1 overflow-y-auto p-3">
-            {posStore.ticketItems.length === 0 ? (
+            {ticketItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-dark-400 gap-3 py-12">
                 <ShoppingBag className="w-12 h-12 opacity-30" strokeWidth={1} />
                 <p className="text-sm">No hay productos agregados</p>
@@ -355,7 +369,7 @@ export default function Pos() {
               </div>
             ) : (
               <div className="space-y-2">
-                {posStore.ticketItems.map((item) => (
+                {ticketItems.map((item) => (
                   <div
                     key={item.id}
                     className="bg-dark-700 rounded-lg p-3 border border-dark-600 group cursor-pointer hover:border-primary-500 transition-all"
@@ -390,7 +404,6 @@ export default function Pos() {
             )}
           </div>
 
-          {/* Ticket footer with total + actions */}
           <div className="border-t border-dark-600 p-4 space-y-3 shrink-0">
             <div className="flex items-center justify-between">
               <span className="text-dark-300 text-sm">Total:</span>
@@ -414,7 +427,7 @@ export default function Pos() {
               </button>
               <button
                 onClick={handleCobrar}
-                disabled={posStore.ticketItems.length === 0}
+                disabled={ticketItems.length === 0}
                 className="btn-success flex flex-col items-center gap-1 !py-3 disabled:opacity-40"
               >
                 <DollarSign className="w-4 h-4" />
@@ -425,7 +438,6 @@ export default function Pos() {
         </div>
       </div>
 
-      {/* Modals */}
       {productoModal && (
         <AddProductModal
           producto={productoModal}
@@ -445,7 +457,7 @@ export default function Pos() {
             if (pedidoCobrado) {
               setPedidoCobrado(null);
               setVista('inicio');
-              posStore.setTipoServicio(null);
+              setTipoServicio(null);
             }
           }}
           onConfirm={handleConfirmCobro}
@@ -453,7 +465,6 @@ export default function Pos() {
         />
       )}
 
-      {/* Receipt for printing */}
       {showReceipt && pedidoCobrado && <Receipt pedido={pedidoCobrado} />}
     </div>
   );

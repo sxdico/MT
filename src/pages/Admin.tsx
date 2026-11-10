@@ -16,16 +16,19 @@ import { usePosStore } from '@/stores/posStore';
 import { useCorteStore } from '@/stores/corteStore';
 
 export default function Admin() {
-  const posStore = usePosStore();
-  const corteStore = useCorteStore();
+  // ✅ FIX: Destructurar
+  const { init: initPos } = usePosStore();
+  const { loadCortes } = useCorteStore();
   const [tick, setTick] = useState(0);
 
+  // ✅ FIX: Array vacío
   useEffect(() => {
-    posStore.init();
-    corteStore.loadCortes();
+    initPos();
+    loadCortes();
     const timer = setInterval(() => setTick((t) => t + 1), 5000);
     return () => clearInterval(timer);
-  }, [posStore, corteStore]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Use tick to force re-read from db
   void tick;

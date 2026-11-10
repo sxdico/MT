@@ -39,18 +39,21 @@ const denominacionesBilletes = [
 ];
 
 export default function Corte() {
-  const corteStore = useCorteStore();
-  const posStore = usePosStore();
+  // ✅ FIX: Destructurar en vez de traer todo el store
+  const { cortes, loadCortes, crearCorte } = useCorteStore();
+  const { init: initPos } = usePosStore();
   const user = useAuthStore((s) => s.user);
 
   const [fondoInicial, setFondoInicial] = useState('');
   const [cantidades, setCantidades] = useState<Record<string, number>>({});
   const [historialOpen, setHistorialOpen] = useState(false);
 
+  // ✅ FIX: Array vacío, ya no [corteStore, posStore]
   useEffect(() => {
-    corteStore.loadCortes();
-    posStore.init();
-  }, [corteStore, posStore]);
+    loadCortes();
+    initPos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Calcular resumen del día
   const pedidosEntregados = db.pedidos.filter((p) => p.estado === 'entregado');
@@ -164,7 +167,7 @@ export default function Corte() {
     }
 
     const ahora = new Date();
-    const corte = corteStore.crearCorte({
+    const corte = crearCorte({
       fecha: ahora.toLocaleString('es-MX'),
       usuario: user?.nombre || 'Admin',
       fondoInicial: fondoNum,
@@ -390,7 +393,7 @@ export default function Corte() {
           <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
             <History className="w-5 h-5 text-primary-400" /> Historial de Cortes
           </h3>
-          {corteStore.cortes.length === 0 ? (
+          {cortes.length === 0 ? (
             <p className="text-dark-400 text-sm py-4 text-center">No hay cortes registrados</p>
           ) : (
             <div className="overflow-x-auto">
@@ -408,7 +411,7 @@ export default function Corte() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...corteStore.cortes].reverse().map((c) => (
+                  {[...cortes].reverse().map((c) => (
                     <tr key={c.id} className="border-b border-dark-700 hover:bg-dark-700 transition-colors">
                       <td className="py-2 px-3 text-primary-400 font-bold">#{c.id}</td>
                       <td className="py-2 px-3 text-dark-200">{c.fecha}</td>
