@@ -14,7 +14,7 @@ import {
 import { db } from '@/lib/db';
 import { usePosStore } from '@/stores/posStore';
 import { useCorteStore } from '@/stores/corteStore';
-
+ 
 export default function Admin() {
   // ✅ FIX: Destructurar
   const { init: initPos } = usePosStore();
