@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { useKitchenStore } from '@/stores/kitchenStore';
 import type { Pedido, TipoServicio, EstadoPedido } from '@/types';
-
+ 
 const servicioIcon: Record<TipoServicio, typeof UtensilsCrossed> = {
   Mesa: UtensilsCrossed,
   'Para llevar': ShoppingBag,
